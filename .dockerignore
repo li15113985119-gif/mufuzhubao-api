@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!.env.example
+uploads
+.local-postgres
+qa-output
+coverage
+*.log
+*.png
+*.jpg
+*.jpeg
+*.zip
+.vscode
+.idea

@@ -1,0 +1,284 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+}
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+}
+enum AdminStatus {
+  ACTIVE
+  DISABLED
+}
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  OFFLINE
+}
+enum IssueStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+enum ResourceCategory {
+  INSTALL_GUIDE
+  PLC_EXAMPLE
+  WIRING_DIAGRAM
+  COMPETITION_QUESTION
+  OPERATION_STANDARD
+}
+enum CaseVerificationStatus {
+  DEMO
+  PENDING_REVIEW
+  VERIFIED
+}
+
+model User {
+  id           String         @id @default(cuid())
+  deviceKey    String         @unique
+  nickname     String?
+  avatarUrl    String?
+  className    String?
+  openid       String?        @unique
+  role         UserRole       @default(USER)
+  status       UserStatus     @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  favorites    Favorite[]
+  issues       Issue[]
+  feedbacks    CaseFeedback[]
+  activityLogs ActivityLog[]
+  caseViews    CaseView[]
+
+  @@index([createdAt])
+}
+
+model Admin {
+  id           String         @id @default(cuid())
+  username     String         @unique
+  passwordHash String
+  displayName  String
+  role         AdminRole      @default(ADMIN)
+  status       AdminStatus    @default(ACTIVE)
+  lastLoginAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  activityLogs ActivityLog[]
+  createdCases FaultCase[]    @relation("CaseCreator")
+  createdResources Resource[] @relation("ResourceCreator")
+
+  @@index([status])
+}
+
+model Software {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  icon        String?
+  sortOrder   Int          @default(0)
+  status      String       @default("ACTIVE")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  cases       FaultCase[]
+  issues      Issue[]
+  resources   Resource[]
+
+  @@index([status, sortOrder])
+}
+
+model FaultType {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  sortOrder   Int          @default(0)
+  status      String       @default("ACTIVE")
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  cases       FaultCase[]
+  issues      Issue[]
+
+  @@index([status, sortOrder])
+}
+
+model FaultCase {
+  id                String        @id @default(cuid())
+  title             String
+  softwareId        String
+  software          Software      @relation(fields: [softwareId], references: [id])
+  softwareVersion   String
+  faultTypeId       String
+  faultType         FaultType     @relation(fields: [faultTypeId], references: [id])
+  errorCode         String?
+  symptom           String
+  possibleCauses    Json
+  solutionSteps     Json
+  systemEnvironment String?
+  tags              Json
+  screenshotUrls    Json
+  searchText        String        @default("")
+  sourceName        String?
+  sourceUrl         String?
+  verificationStatus CaseVerificationStatus @default(PENDING_REVIEW)
+  verifiedAt        DateTime?
+  status            ContentStatus @default(DRAFT)
+  viewCount         Int           @default(0)
+  favoriteCount     Int           @default(0)
+  solvedCount       Int           @default(0)
+  unsolvedCount     Int           @default(0)
+  publishedAt       DateTime?
+  createdById       String?
+  createdBy         Admin?        @relation("CaseCreator", fields: [createdById], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+  favorites         Favorite[]
+  feedbacks         CaseFeedback[]
+  views             CaseView[]
+
+  @@index([softwareId, status, publishedAt])
+  @@index([faultTypeId, status, publishedAt])
+  @@index([status, publishedAt])
+  @@index([deletedAt])
+}
+
+model Favorite {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  caseId    String
+  case      FaultCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  @@unique([userId, caseId])
+  @@index([createdAt])
+}
+
+model Issue {
+  id              String       @id @default(cuid())
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  className       String
+  contact         String
+  softwareId      String
+  software        Software     @relation(fields: [softwareId], references: [id])
+  softwareVersion String
+  faultTypeId     String
+  faultType       FaultType    @relation(fields: [faultTypeId], references: [id])
+  symptom         String?
+  errorCode       String?
+  description     String
+  screenshotUrls  Json
+  status          IssueStatus  @default(PENDING)
+  adminReply      String?
+  internalNote    String?
+  resolvedAt      DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  @@index([status, createdAt])
+  @@index([softwareId, status])
+  @@index([faultTypeId, status])
+  @@index([userId, createdAt])
+}
+
+model CaseFeedback {
+  id        String    @id @default(cuid())
+  caseId    String
+  case      FaultCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isSolved  Boolean
+  content   String?
+  handledAt DateTime?
+  createdAt DateTime  @default(now())
+  @@index([caseId, isSolved])
+  @@index([handledAt])
+}
+
+model Resource {
+  id              String           @id @default(cuid())
+  title           String
+  category        ResourceCategory
+  group           String?
+  tag             String?
+  softwareId      String?
+  software        Software?        @relation(fields: [softwareId], references: [id])
+  softwareVersion String?
+  description     String?
+  fileUrl         String?
+  externalUrl     String?
+  fileType        String?
+  fileSize        Int?
+  estimatedTime   Int?
+  content         Json?
+  sortOrder       Int              @default(0)
+  downloadCount   Int              @default(0)
+  source          String?
+  status          ContentStatus    @default(DRAFT)
+  createdById     String?
+  createdBy       Admin?           @relation("ResourceCreator", fields: [createdById], references: [id])
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  deletedAt       DateTime?
+  @@index([category, status])
+  @@index([status, sortOrder])
+  @@index([softwareId, status])
+  @@index([deletedAt])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  adminId    String?
+  admin      Admin?    @relation(fields: [adminId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String
+  targetId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  @@index([createdAt])
+  @@index([action, createdAt])
+}
+
+model Attachment {
+  id        String   @id @default(cuid())
+  ownerType String
+  ownerId   String?
+  fileName  String
+  fileUrl   String
+  mimeType  String
+  fileSize  Int
+  createdAt DateTime @default(now())
+  @@index([ownerType, ownerId])
+}
+
+model CaseView {
+  id        String    @id @default(cuid())
+  caseId    String
+  case      FaultCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime  @default(now())
+  @@index([createdAt])
+  @@index([caseId, createdAt])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
